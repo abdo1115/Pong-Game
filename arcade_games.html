@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arcade Games</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Poppins', sans-serif;
+        }
+        nav {
+            margin: 20px;
+        }
+        button {
+            margin: 0 10px;
+            padding: 10px 20px;
+            cursor: pointer;
+            background-color: #444;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #666;
+        }
+        canvas {
+            border: 2px solid #fff;
+        }
+        #score {
+            font-size: 20px;
+            margin: 10px;
+        }
+        #gameOver {
+            display: none;
+            font-size: 30px;
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <button onclick="showGame('pong')">Pong Game</button>
+        <button onclick="showGame('spaceInvaders')">Space Invaders</button>
+    </nav>
+    <div id="score">Score: 0</div>
+    <div id="gameOver">Game Over! Press any key to restart.</div>
+    <canvas id="gameCanvas" width="480" height="320"></canvas>
+    <audio id="hitSound" src="hit.mp3"></audio>
+    <audio id="scoreSound" src="score.mp3"></audio>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score');
+        const gameOverDisplay = document.getElementById('gameOver');
+        const hitSound = document.getElementById('hitSound');
+        const scoreSound = document.getElementById('scoreSound');
+
+        let currentGame = '';
+        let score = 0;
+
+        // Pong Game Variables
+        const DIRECTION = {
+            IDLE: 0,
+            UP: 1,
+            DOWN: 2,
+        };
+
+        var Ball = {
+            new: function (incrementedSpeed) {
+                return {
+                    width: 18,
+                    height: 18,
+                    x: (this.canvas.width / 2) - 9,
+                    y: (this.canvas.height / 2) - 9,
+                    moveX: DIRECTION.IDLE,
+                    moveY: DIRECTION.IDLE,
+                    speed: incrementedSpeed || 7 
+                };
+            }
+        };
+
+        var Ai = {
+            new: function (side) {
+                return {
+                    width: 18,
+                    height: 180,
+                    x: side === 'left' ? 150 : this.canvas.width - 150,
+                    y: (this.canvas.height / 2) - 35,
+                    score: 0,
+                    move: DIRECTION.IDLE,
+                    speed: 8
+                };
+            }
+        };
+
+        var Game = {
+            initialize: function () {
+                this.canvas = canvas;
+                this.context = this.canvas.getContext('2d');
+
+                this.canvas.width = 480;
+                this.canvas.height = 320;
+
+                this.player = Ai.new.call(this, 'left');
+                this.ai = Ai.new.call(this, 'right');
+                this.ball = Ball.new.call(this);
+
+                this.running = this.over = false;
+                this.turn = this.ai;
+                this.timer = this.round = 0;
+                this.color = '#8c52ff';
+
+                this.listen();
+                this.menu();
+            },
+            menu: function () {
+                this.draw();
+                this.context.font = '20px Courier New';
+                this.context.fillStyle = this.color;
+                this.context.fillText('Press any key to begin', this.canvas.width / 2 - 100, this.canvas.height / 2);
+            },
+            draw: function () {
+                this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.context.fillStyle = this.color;
+                this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                this.context.fillStyle = '#ffffff';
+                this.context.fillRect(this.player.x, this.player.y, this.player.width, this.player.height);
+                this.context.fillRect(this.ai.x, this.ai.y, this.ai.width, this.ai.height);
+                this.context.fillRect(this.ball.x, this.ball.y, this.ball.width, this.ball.height);
+                this.context.font = '20px Courier New';
+                this.context.fillText('Score: ' + this.player.score, 20, 20);
+            },
+            listen: function () {
+                document.addEventListener('keydown', (key) => {
+                    if (!this.running) {
+                        this.running = true;
+                        this.loop();
+                    }
+                    if (key.keyCode === 38) this.player.move = DIRECTION.UP;
+                    if (key.keyCode === 40) this.player.move = DIRECTION.DOWN;
+                });
+                document.addEventListener('keyup', (key) => { this.player.move = DIRECTION.IDLE; });
+            },
+            loop: function () {
+                this.update();
+                this.draw();
+                if (!this.over) requestAnimationFrame(() => this.loop());
+            },
+            update: function () {
+                if (this.player.move === DIRECTION.UP && this.player.y > 0) this.player.y -= this.player.speed;
+                if (this.player.move === DIRECTION.DOWN && this.player.y < this.canvas.height - this.player.height) this.player.y += this.player.speed;
+
+                // Ball movement and collision
+                this.ball.x += this.ball.moveX === DIRECTION.UP ? -this.ball.speed : this.ball.moveX === DIRECTION.DOWN ? this.ball.speed : 0;
+                this.ball.y += this.ball.moveY === DIRECTION.UP ? -this.ball.speed : this.ball.moveY === DIRECTION.DOWN ? this.ball.speed : 0;
+
+                if (this.ball.y <= 0 || this.ball.y >= this.canvas.height - this.ball.height) this.ball.moveY = this.ball.moveY === DIRECTION.UP ? DIRECTION.DOWN : DIRECTION.UP;
+
+                if (this.ball.x <= this.player.x + this.player.width && this.ball.y > this.player.y && this.ball.y < this.player.y + this.player.height) {
+                    this.ball.moveX = DIRECTION.RIGHT;
+                    this.player.score++; // Increment score
+                    scoreSound.play(); // Play scoring sound
+                }
+
+                if (this.ball.x < 0) {
+                    this.over = true;
+                    gameOverDisplay.style.display = 'block';
+                }
+            }
+        };
+
+        // Space Invaders Variables
+        let shipX = (canvas.width - 30) / 2;
+        const bullets = [];
+        const aliens = [];
+        let alienSpeed = 30;
+        let level = 1;
+
+        function initAliens() {
+            aliens.length = 0; // Reset aliens
+            for (let c = 0; c < 10; c++) {
+                aliens[c] = [];
+                for (let r = 0; r < 5; r++) {
+                    aliens[c][r] = { x: c * 40 + 30, y: r * 30 + 30, status: 1 };
+                }
+            }
+        }
+
+        function drawShip() {
+            ctx.fillStyle = '#00FF00';
+            ctx.fillRect(shipX, canvas.height - 15, 30, 15);
+        }
+
+        function drawBullets() {
+            bullets.forEach((bullet, index) => {
+                ctx.fillStyle = '#FF0000';
+                ctx.fillRect(bullet.x, bullet.y, 5, 10);
+                bullet.y -= 4;
+                if (bullet.y < 0) bullets.splice(index, 1); // Remove bullet if it goes off screen
+            });
+        }
+
+        function drawAliens() {
+            for (let c = 0; c < 10; c++) {
+                for (let r = 0; r < 5; r++) {
+                    if (aliens[c][r].status === 1) {
+                        ctx.fillStyle = '#00FFFF';
+                        ctx.fillRect(aliens[c][r].x, aliens[c][r].y, 30, 20);
+                    }
+                }
+            }
+        }
+
+        function checkCollision() {
+            bullets.forEach((bullet, bulletIndex) => {
+                aliens.forEach((column, cIndex) => {
+                    column.forEach((alien, rIndex) => {
+                        if (alien.status === 1) {
+                            if (
+                                bullet.x > alien.x &&
+                                bullet.x < alien.x + 30 &&
+                                bullet.y > alien.y &&
+                                bullet.y < alien.y + 20
+                            ) {
+                                alien.status = 0; // Mark alien as destroyed
+                                bullets.splice(bulletIndex, 1); // Remove bullet
+                                score++; // Increment score
+                                scoreDisplay.innerText = 'Score: ' + score;
+                                hitSound.play(); // Play hit sound
+                            }
+                        }
+                    });
+                });
+            });
+        }
+
+        function levelUp() {
+            level++;
+            alienSpeed += 5; // Increase speed as level increases
+            initAliens(); // Reset aliens for new level
+            alert('Level Up! You are now on level ' + level);
+        }
+
+        function drawSpaceInvaders() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawShip();
+            drawBullets();
+            drawAliens();
+            checkCollision();
+
+            if (aliens.some(column => column.some(alien => alien.status === 1 && alien.y > canvas.height - 20))) {
+                alert('Game Over! You were invaded!');
+                currentGame = '';
+                showGame('pong');
+            }
+
+            requestAnimationFrame(drawSpaceInvaders);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (currentGame === 'spaceInvaders') {
+                if (e.key === 'ArrowLeft' && shipX > 0) {
+                    shipX -= 10;
+                } else if (e.key === 'ArrowRight' && shipX < canvas.width - 30) {
+                    shipX += 10;
+                } else if (e.key === ' ') {
+                    bullets.push({ x: shipX + 12.5, y: canvas.height - 25 }); // Fire bullet
+                }
+            }
+        });
+
+        function showGame(game) {
+            currentGame = game;
+            score = 0; // Reset score when changing games
+            scoreDisplay.innerText = 'Score: ' + score;
+            gameOverDisplay.style.display = 'none';
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (game === 'pong') {
+                Game.initialize();
+            } else if (game === 'spaceInvaders') {
+                initAliens();
+                drawSpaceInvaders();
+            }
+        }
+    </script>
+</body>
+</html>
